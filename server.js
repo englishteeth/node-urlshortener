@@ -7,6 +7,7 @@ var mongoose = require('mongoose');
 var cors = require('cors');
 
 var bodyParser = require('body-parser'); 
+var dns = require('dns');
 
 var app = express();
 
@@ -15,6 +16,38 @@ var port = process.env.PORT || 3000;
 
 /** this project needs a db !! **/ 
 mongoose.connect(process.env.DB_URI);
+
+const Schema = mongoose.Schema;
+const shortURLSchema = new Schema({
+  original: { type: String, required: true },
+  short: { type: Number, default: 0 }
+});
+shortURLSchema.pre('validate', function(next) {
+  var self = this;
+    ShortURL.find({})
+      .sort({ short: -1 })
+      .limit(1)
+      .exec(function(err, result) {
+          if (err) return console.error(err);
+          self.short = result[0].short + 1; 
+          next(); 
+    });
+});
+const ShortURL = mongoose.model("ShortURL", shortURLSchema);
+
+var findURL = function(original, data) {
+    ShortURL.findOne({original: original}, function(err, result) {
+    if (err) return console.error(err);
+    data(null, result); 
+  });
+};
+
+var saveURL = function(original, data) {
+  new ShortURL({ original: original }).save( function(err, res) {
+    if (err) return console.error(err);
+    data(null, res);
+  });
+};
 
 app.use(cors());
 
@@ -29,14 +62,28 @@ app.get('/', function(req, res){
 });
 
 // API endpoint... 
-app.post("/api/shorturl/new", (req, res)=>{
+app.post("/api/shorturl/new", (req, resp)=>{
   const { url } = req.body;
-  res.json({ url: `${url}` });
-});
-
-
-app.get("/api/hello", function (req, res) {
-  res.json({greeting: 'hello API'});
+  try {
+    const pu = new URL(url);
+    dns.lookup(pu.hostname, (err, addr) => {
+      findURL(pu.href, (err, res) => {
+        if (res==null) {
+          saveURL(pu.href, (err, res) =>  {
+            resp.json({ original_url:`${pu.href}`, "short_url":`${res.short}`});
+          });
+        } else {
+          resp.json({ original_url:`${pu.href}`, "short_url":`${res.short}`});
+        }
+      });
+    });
+  } catch (e) {
+    if (e instanceof TypeError) {
+      resp.json({ err: e.message });
+    } else {
+      throw e;  // re-throw the error unchanged
+    }
+  }    
 });
 
 
