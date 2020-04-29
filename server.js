@@ -42,6 +42,13 @@ var findURL = function(original, data) {
   });
 };
 
+var findShortURL = function(short, data) {
+    ShortURL.findOne({short: short}, function(err, result) {
+    if (err) return console.error(err);
+    data(null, result); 
+  });
+};
+
 var saveURL = function(original, data) {
   new ShortURL({ original: original }).save( function(err, res) {
     if (err) return console.error(err);
@@ -84,6 +91,18 @@ app.post("/api/shorturl/new", (req, resp)=>{
       throw e;  // re-throw the error unchanged
     }
   }    
+});
+
+app.get("/api/shorturl/:short_url", (req, resp) => {
+  const { short_url } = req.params;
+  findShortURL(short_url, (err, res) => {
+    if (res==null) {
+      resp.json({ err: "short url not found" });
+    } else {
+      console.log(`Redirecting to: ${res.original}`);
+      resp.redirect(`${res.original}`);
+    }
+  });
 });
 
 
